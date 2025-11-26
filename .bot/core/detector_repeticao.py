@@ -1,0 +1,180 @@
+"""Módulo simples para detectar repetições/padrões nos eventos de memória.
+
+Este detector é propositalmente leve e baseado em hashing/contagem e n-grams
+de sequências de eventos. É um bom ponto de partida antes de migrar para
+algoritmos mais avançados (embeddings, clustering, PrefixSpan etc.).
+"""
+
+import re
+from collections import Counter, defaultdict
+from typing import List, Dict, Any
+
+
+def normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    txt = text.lower()
+    # remove caracteres não alfanuméricos (mantém espaços)
+    txt = re.sub(r"[^a-z0-9\s]+", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
+def event_signature(event: Dict[str, Any]) -> str:
+    """Cria uma assinatura simples para um evento da memória.
+
+    Usa 'event_type' e campos relevantes dentro de 'data' quando disponíveis
+    (por exemplo: comando do usuário ou ação executada).
+    """
+    etype = event.get("event_type") or event.get("type") or "unknown"
+    data = event.get("data") or {}
+
+    # extrai campos que costumam ser úteis
+    parts = [etype]
+    if isinstance(data, dict):
+        if "command" in data:
+            parts.append(normalize_text(str(data.get("command"))))
+        elif "action" in data:
+            parts.append(normalize_text(str(data.get("action"))))
+        elif "result" in data:
+            parts.append(normalize_text(str(data.get("result"))))
+        else:
+            # fallback: stringify pequeno resumo
+            summary = " ".join(f"{k}:{v}" for k, v in list(data.items())[:2])
+            parts.append(normalize_text(summary))
+    else:
+        parts.append(normalize_text(str(data)))
+
+    return "||".join([p for p in parts if p])
+
+
+def count_event_frequencies(events: List[Dict[str, Any]]) -> Counter:
+    """Conta a frequência de assinaturas de eventos."""
+    sigs = [event_signature(e) for e in events]
+    return Counter(sigs)
+
+
+def detect_frequent_events(
+    events: List[Dict[str, Any]], min_count: int = 3
+) -> Dict[str, Any]:
+    """Retorna assinaturas que aparecem pelo menos `min_count` vezes.
+
+    Resultado: dict {signature: {"count": int, "examples": [event, ...]}}
+    Cada exemplo é o próprio evento (pode incluir timestamp/datetime se presente).  # noqa: E501
+    """
+    freqs = count_event_frequencies(events)
+    result = {}
+    for sig, cnt in freqs.items():
+        if cnt >= min_count:
+            # coleta alguns exemplos que correspondem à assinatura
+            examples = [e for e in events if event_signature(e) == sig][:3]
+            result[sig] = {"count": cnt, "examples": examples}
+    return result
+
+
+def sliding_event_signatures(events: List[Dict[str, Any]], key_fn=event_signature) -> List[str]:  # noqa: E501
+    return [key_fn(e) for e in events]
+
+
+def detect_frequent_sequences(events, n=2, min_count=2):
+    """Detecta sequências frequentes de tamanho `n`.
+
+    Retorna um dict com sequência (tuple de assinaturas) para contagem e exemplos:  # noqa: E501
+      { (sig1, sig2): {"count": int, "examples": [ {"start_index": i, "events": [...]}, ... ] } }  # noqa: E501
+    """
+    sigs = sliding_event_signatures(events)
+    seq_counts = Counter()
+    seq_examples = defaultdict(list)
+    if n <= 0:
+        return {}
+    for i in range(len(sigs) - n + 1):
+        seq = tuple(sigs[i:i + n])
+        seq_counts[seq] += 1
+        # armazena um exemplo (inclui eventos e índice inicial)
+        seq_examples[seq].append({"start_index": i, "events": events[i:i + n]})
+
+    # constrói resultado de forma explícita para ficar dentro dos limites de
+    # comprimento de linha
+    result = {}
+    for seq, cnt in seq_counts.items():
+        if cnt >= min_count:
+            result[seq] = {"count": cnt, "examples": seq_examples[seq][:3]}
+
+    return result
+
+
+def find_patterns_in_memory(
+    memory_obj,
+    min_event_count: int = 3,
+    seq_n: int = 2,
+    min_seq_count: int = 2,
+) -> Dict[str, Any]:
+    """API de conveniência: aceita um objeto de memória (com load_all) e retorna padrões.  # noqa: E501
+
+    Retorna um dicionário com keys:
+      - 'frequent_events': {signature: count}
+      - 'frequent_sequences': {tuple(signature...): count}
+    """
+    events = []
+    try:
+        # Suporta o antigo `load_all()` síncrono
+        if hasattr(memory_obj, "load_all") and callable(getattr(memory_obj, "load_all")):
+            events = memory_obj.load_all()
+        # Suporta memória assíncrona com `list_all()` que retorna Result
+        elif hasattr(memory_obj, "list_all") and callable(getattr(memory_obj, "list_all")):
+            import asyncio
+
+            try:
+                coro = memory_obj.list_all()
+                if asyncio.iscoroutine(coro):
+                    res = asyncio.run(coro)
+                    if hasattr(res, "success") and res.success:
+                        events = res.data or []
+                    elif isinstance(res, list):
+                        events = res
+                    else:
+                        events = []
+                else:
+                    # se list_all não for coroutine, chama diretamente
+                    events = coro
+            except Exception:
+                events = []
+        else:
+            events = memory_obj if isinstance(memory_obj, list) else []
+    except Exception:
+        events = memory_obj if isinstance(memory_obj, list) else []
+
+    frequent_events = detect_frequent_events(events, min_count=min_event_count)
+    frequent_sequences = detect_frequent_sequences(
+        events, n=seq_n, min_count=min_seq_count
+    )
+
+    return {
+        "frequent_events": frequent_events,
+        "frequent_sequences": frequent_sequences,
+        "total_events": len(events),
+    }
+
+
+def export_patterns_json(
+    memory_obj,
+    out_path: str,
+    min_event_count: int = 3,
+    seq_n: int = 2,
+    min_seq_count: int = 2,
+) -> str:
+    """Exporta o relatório de padrões para um arquivo JSON em `out_path`.
+
+    O formato contém: total_events, frequent_events (com count+examples) e frequent_sequences (with examples).  # noqa: E501
+    """
+    import json
+
+    report = find_patterns_in_memory(
+        memory_obj,
+        min_event_count=min_event_count,
+        seq_n=seq_n,
+        min_seq_count=min_seq_count,
+    )
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    return out_path

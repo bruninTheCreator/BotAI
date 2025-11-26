@@ -1,0 +1,92 @@
+{
+  "history": [
+    {
+      "time": "2025-10-28 15:04:31.327582",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "open_app",
+          "app": "chrome"
+        },
+        "result": {
+          "status": "ok",
+          "msg": "chrome aberto"
+        }
+      }
+    },
+    {
+      "time": "2025-10-28 15:05:38.535029",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "write_text",
+          "text": "ol\u00e1 mundo no bloco de notas"
+        },
+        "result": {
+          "status": "ok",
+          "typed": "ol\u00e1 mundo no bloco de notas"
+        }
+      }
+    },
+    {
+      "time": "2025-10-28 15:06:17.205427",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "unknown",
+          "text": "listar aquivos de documentos"
+        },
+        "result": {
+          "status": "unknown",
+          "text": "listar aquivos de documentos"
+        }
+      }
+    },
+    {
+      "time": "2025-10-28 15:07:09.528967",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "unknown",
+          "text": "clicar 100,200"
+        },
+        "result": {
+          "status": "unknown",
+          "text": "clicar 100,200"
+        }
+      }
+    },
+    {
+      "time": "2025-10-28 15:07:22.783202",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "click",
+          "x": 100,
+          "y": 200
+        },
+        "result": {
+          "status": "ok",
+          "pos": [
+            100,
+            200
+          ]
+        }
+      }
+    },
+    {
+      "time": "2025-10-28 15:11:03.093929",
+      "type": "action_executed",
+      "payload": {
+        "instr": {
+          "action": "unknown",
+          "text": "desativar"
+        },
+        "result": {
+          "status": "unknown",
+          "text": "desativar"
+        }
+      }
+    }
+  ]
+}

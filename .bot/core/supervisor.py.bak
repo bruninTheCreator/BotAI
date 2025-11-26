@@ -1,0 +1,20 @@
+# core/supervisor.py
+import os
+import time
+import json
+
+
+class Supervisor:
+    def __init__(self, log_dir="data/logs"):
+        os.makedirs(log_dir, exist_ok=True)
+        self.logfile = os.path.join(log_dir, f"log_{int(time.time())}.ndjson")
+
+    def log(self, event, payload):
+        """Registra um evento no log."""
+        entry = {
+            "timestamp": time.time(),
+            "event": event,
+            "payload": payload
+        }
+        with open(self.logfile, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, default=str, ensure_ascii=False) + "\n")

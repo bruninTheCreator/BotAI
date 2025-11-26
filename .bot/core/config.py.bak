@@ -1,0 +1,268 @@
+"""
+Sistema de configuração centralizado com validação e type-safety.
+Segue o padrão de configuração profissional com profile e override.
+"""
+
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any
+from enum import Enum
+import os
+from pathlib import Path
+import json
+
+# dotenv (python-dotenv) é opcional em ambientes onde não estiver instalado
+try:
+    from dotenv import load_dotenv
+except Exception:
+    def load_dotenv():
+        return None
+
+
+class Environment(Enum):
+    """Ambientes de execução."""
+    DEVELOPMENT = "development"
+    PRODUCTION = "production"
+    TESTING = "testing"
+
+
+@dataclass
+class OpenAIConfig:
+    """Configuração do OpenAI."""
+    api_key: str = ""
+    model: str = "gpt-4o-mini"
+    max_tokens: int = 1000
+    temperature: float = 0.7
+    timeout: int = 30
+    
+    def is_valid(self) -> bool:
+        """Valida a configuração."""
+        return bool(self.api_key.strip())
+
+
+@dataclass
+class PerceptionConfig:
+    """Configuração do módulo de percepção."""
+    tesseract_path: Optional[str] = None
+    ocr_lang: str = "por"
+    use_preprocessing: bool = True
+    preprocessing_scale: float = 1.5
+    template_matching_threshold: float = 0.8
+    screenshot_quality: int = 90
+
+
+@dataclass
+class ExecutorConfig:
+    """Configuração do executor."""
+    enable_confirmation: bool = True
+    confirmation_timeout: int = 30
+    action_delay: float = 0.1
+    auto_retry: bool = True
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
+
+@dataclass
+class MemoryConfig:
+    """Configuração do sistema de memória."""
+    storage_path: str = "data/memory_log.jsonl"
+    backup_enabled: bool = True
+    backup_interval: int = 3600  # segundos
+    max_memory_items: int = 10000
+    cleanup_older_than_days: int = 30
+    vector_storage_enabled: bool = False
+    vector_storage_type: str = "chromadb"
+
+
+@dataclass
+class LoggingConfig:
+    """Configuração de logging."""
+    level: str = "INFO"
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_dir: str = "data/logs"
+    max_file_size: int = 10485760  # 10MB
+    backup_count: int = 5
+    console_output: bool = True
+    file_output: bool = True
+
+
+@dataclass
+class AppConfig:
+    """Configuração central da aplicação."""
+    env: Environment = Environment.DEVELOPMENT
+    app_name: str = "BotAI Assistant"
+    version: str = "2.0.0"
+    debug: bool = False
+    
+    # Subconfigurations
+    openai: OpenAIConfig = field(default_factory=OpenAIConfig)
+    perception: PerceptionConfig = field(default_factory=PerceptionConfig)
+    executor: ExecutorConfig = field(default_factory=ExecutorConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+    
+    # Custom settings
+    custom: Dict[str, Any] = field(default_factory=dict)
+    
+    def is_production(self) -> bool:
+        """Verifica se está em produção."""
+        return self.env == Environment.PRODUCTION
+    
+    def is_development(self) -> bool:
+        """Verifica se está em desenvolvimento."""
+        return self.env == Environment.DEVELOPMENT
+    
+    def is_testing(self) -> bool:
+        """Verifica se está em testes."""
+        return self.env == Environment.TESTING
+
+
+class ConfigLoader:
+    """Carregador de configurações com suporte a múltiplas fontes."""
+    
+    @staticmethod
+    def from_env() -> AppConfig:
+        """Carrega configuração a partir de variáveis de ambiente."""
+        load_dotenv()
+        
+        config = AppConfig(
+            env=Environment(os.getenv("ENV", "development")),
+            debug=os.getenv("DEBUG", "false").lower() == "true",
+        )
+        
+        # OpenAI
+        config.openai.api_key = os.getenv("OPENAI_API_KEY", "")
+        config.openai.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        config.openai.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
+        
+        # Perception
+        config.perception.tesseract_path = os.getenv("TESSERACT_CMD")
+        config.perception.ocr_lang = os.getenv("OCR_LANG", "por")
+        
+        # Memory
+        config.memory.storage_path = os.getenv("MEMORY_PATH", "data/memory_log.jsonl")
+        config.memory.vector_storage_enabled = os.getenv("VECTOR_STORAGE", "false").lower() == "true"
+        
+        # Logging
+        config.logging.level = os.getenv("LOG_LEVEL", "INFO")
+        config.logging.log_dir = os.getenv("LOG_DIR", "data/logs")
+        
+        return config
+    
+    @staticmethod
+    def from_file(path: str) -> AppConfig:
+        """Carrega configuração de um arquivo JSON."""
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            config = AppConfig()
+            
+            # Merge com dados do arquivo
+            if 'env' in data:
+                config.env = Environment(data['env'])
+            if 'debug' in data:
+                config.debug = data['debug']
+            if 'openai' in data:
+                config.openai = OpenAIConfig(**data['openai'])
+            if 'perception' in data:
+                config.perception = PerceptionConfig(**data['perception'])
+            if 'executor' in data:
+                config.executor = ExecutorConfig(**data['executor'])
+            if 'memory' in data:
+                config.memory = MemoryConfig(**data['memory'])
+            if 'logging' in data:
+                config.logging = LoggingConfig(**data['logging'])
+            if 'custom' in data:
+                config.custom = data['custom']
+            
+            return config
+        except Exception as e:
+            raise ValueError(f"Erro ao carregar configuração de {path}: {e}")
+    
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> AppConfig:
+        """Carrega configuração de um dicionário."""
+        config = AppConfig()
+        
+        if 'env' in data:
+            config.env = Environment(data['env'])
+        if 'debug' in data:
+            config.debug = data['debug']
+        if 'openai' in data:
+            config.openai = OpenAIConfig(**data['openai'])
+        if 'perception' in data:
+            config.perception = PerceptionConfig(**data['perception'])
+        if 'executor' in data:
+            config.executor = ExecutorConfig(**data['executor'])
+        if 'memory' in data:
+            config.memory = MemoryConfig(**data['memory'])
+        if 'logging' in data:
+            config.logging = LoggingConfig(**data['logging'])
+        if 'custom' in data:
+            config.custom = data['custom']
+        
+        return config
+    
+    @staticmethod
+    def save_to_file(config: AppConfig, path: str) -> None:
+        """Salva configuração em arquivo JSON."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
+        data = {
+            'env': config.env.value,
+            'app_name': config.app_name,
+            'version': config.version,
+            'debug': config.debug,
+            'openai': {
+                'model': config.openai.model,
+                'max_tokens': config.openai.max_tokens,
+                'temperature': config.openai.temperature,
+                'timeout': config.openai.timeout,
+            },
+            'perception': {
+                'ocr_lang': config.perception.ocr_lang,
+                'use_preprocessing': config.perception.use_preprocessing,
+                'preprocessing_scale': config.perception.preprocessing_scale,
+                'template_matching_threshold': config.perception.template_matching_threshold,
+            },
+            'executor': {
+                'enable_confirmation': config.executor.enable_confirmation,
+                'confirmation_timeout': config.executor.confirmation_timeout,
+                'auto_retry': config.executor.auto_retry,
+                'max_retries': config.executor.max_retries,
+            },
+            'memory': {
+                'storage_path': config.memory.storage_path,
+                'backup_enabled': config.memory.backup_enabled,
+                'max_memory_items': config.memory.max_memory_items,
+                'vector_storage_enabled': config.memory.vector_storage_enabled,
+            },
+            'logging': {
+                'level': config.logging.level,
+                'log_dir': config.logging.log_dir,
+                'console_output': config.logging.console_output,
+                'file_output': config.logging.file_output,
+            },
+            'custom': config.custom,
+        }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+# Singleton global
+_config: Optional[AppConfig] = None
+
+
+def get_config() -> AppConfig:
+    """Retorna a instância global de configuração."""
+    global _config
+    if _config is None:
+        _config = ConfigLoader.from_env()
+    return _config
+
+
+def set_config(config: AppConfig) -> None:
+    """Define a configuração global."""
+    global _config
+    _config = config

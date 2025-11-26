@@ -1,0 +1,161 @@
+import os
+import pyautogui
+import time
+import webbrowser
+
+
+class Executor:
+    def _open_app(self, target: str) -> str:
+        """Abre um aplicativo."""
+        try:
+            app_map = {
+                "bloco de notas": "notepad.exe",
+                "notepad": "notepad.exe",
+                "calculadora": "calc.exe",
+                "calculator": "calc.exe",
+                "calc": "calc.exe",
+                "chrome": "chrome.exe",
+                "edge": "msedge.exe",
+                "msedge": "msedge.exe",
+                "explorer": "explorer.exe",
+                "excel": "excel.exe",
+                "outlook": "outlook.exe",
+                "word": "winword.exe",
+                "logs": "notepad.exe"
+            }
+            app_executable = app_map.get(target.lower(), target)
+            os.system(f'start {app_executable}')
+            time.sleep(2)  # Aguarda o app abrir
+            return f"Aplicativo '{target}' aberto com sucesso."
+        except Exception as e:
+            return f"Erro ao abrir o aplicativo '{target}': {e}"
+
+    def _type_text(self, content: str) -> str:
+        """Digita um texto usando o teclado."""
+        try:
+            # Usa write() para suportar caracteres especiais e acentos
+            pyautogui.write(content, interval=0.05)
+            return f"Texto digitado com sucesso ({len(content)} caracteres)."
+        except Exception as e:
+            return f"Erro ao digitar texto: {e}"
+
+    def _hotkey(self, keys: list) -> str:
+        """Pressiona uma combinação de teclas de atalho."""
+        try:
+            # Normaliza as teclas para minúsculas
+            normalized_keys = [k.lower().strip() for k in keys]
+            pyautogui.hotkey(*normalized_keys)
+            return f"Atalho '{'+'.join(normalized_keys)}' pressionado."
+        except Exception as e:
+            return f"Erro ao pressionar atalho: {e}"
+
+    def _click(self, x: int, y: int, button: str = 'left') -> str:
+        """Clica em uma coordenada específica da tela."""
+        try:
+            pyautogui.click(x, y, button=button)
+            return f"Clique realizado em ({x}, {y})."
+        except Exception as e:
+            return f"Erro ao clicar: {e}"
+
+    def _browse(self, url: str) -> str:
+        """Abre o navegador padrão para uma URL."""
+        if not url:
+            return "Erro ao executar 'browse': URL não fornecida."
+
+        try:
+            # Garante que a URL tenha protocolo
+            if not url.startswith(
+                    "http://") and not url.startswith("https://"):
+                # Se for um nome de site conhecido, adiciona https://www.
+                if "." not in url:
+                    url = f"https://www.{url}.com"
+                else:
+                    url = f"https://{url}"
+
+            webbrowser.open(url)
+            return f"Navegando para: {url}"
+        except Exception as e:
+            return f"Erro ao abrir navegador: {e}"
+
+    def execute_plan(self, plan: list, supervisor, memory):
+        """
+        Executa uma lista de ações (plano).
+        """
+        if not plan:
+            return ["Nenhuma ação para executar."]
+
+        results = []
+        print("Executando plano...")
+
+        for i, step in enumerate(plan, 1):
+            action = step.get("action")
+            result = f"Ação '{action}' não reconhecida."
+
+            try:
+                if action == "open_app":
+                    target = step.get("target")
+                    if not target:
+                        result = "Erro: 'target' não especificado para 'open_app'."
+                    else:
+                        result = self._open_app(target=target)
+
+                elif action == "type_text":
+                    content = step.get("content")
+                    if not content:
+                        result = "Erro: 'content' não especificado para 'type_text'."
+                    else:
+                        result = self._type_text(content=content)
+
+                elif action == "hotkey":
+                    # Aceita 'keys', 'key' ou 'target'
+                    keys = step.get("keys") or step.get(
+                        "key") or step.get("target")
+
+                    if not keys:
+                        result = "Erro: Parâmetro 'keys' não fornecido para 'hotkey'."
+                    else:
+                        # Se for string, converte para lista
+                        if isinstance(keys, str):
+                            keys = keys.split('+')
+                        result = self._hotkey(keys=keys)
+
+                elif action == "click":
+                    # Aceita coordenadas aninhadas ou no topo
+                    coords = step.get("coordinates", {})
+                    x = step.get("x") or coords.get("x")
+                    y = step.get("y") or coords.get("y")
+
+                    if x is None or y is None:
+                        result = "Erro: Coordenadas 'x' e 'y' não fornecidas para 'click'."
+                    else:
+                        result = self._click(x=int(x), y=int(y))
+
+                elif action == "browse":
+                    url = step.get("url")
+                    if not url:
+                        result = "Erro: 'url' não especificada para 'browse'."
+                    else:
+                        result = self._browse(url=url)
+
+                else:
+                    result = f"Ação '{action}' não é suportada."
+
+                # Pausa entre ações
+                if i < len(plan):
+                    print("Próximo passo...")
+                    time.sleep(1)
+
+            except Exception as e:
+                result = f"Erro ao executar '{action}': {e}"
+
+            results.append(result)
+            print(f"Resultado da execução:\n   - {result}")
+
+            # Salva na memória
+            memory.save(event_type="execution_result", data={
+                "step": i,
+                "action": action,
+                "result": result
+            })
+
+        return results

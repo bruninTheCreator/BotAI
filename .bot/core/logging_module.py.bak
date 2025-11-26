@@ -1,0 +1,223 @@
+"""
+Sistema de logging estruturado com observabilidade profissional.
+Suporta múltiplos handlers, níveis de log e contexto.
+"""
+
+import logging
+import logging.handlers
+from typing import Optional, Dict, Any
+from pathlib import Path
+from datetime import datetime
+import json
+from functools import wraps
+import time
+from contextlib import contextmanager
+
+from .config import AppConfig, get_config
+
+
+class StructuredFormatter(logging.Formatter):
+    """Formatter que estrutura os logs em JSON."""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        """Formata o log como JSON estruturado."""
+        log_data = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno,
+        }
+        
+        # Adiciona contexto extra se houver
+        if hasattr(record, 'extra_data'):
+            log_data['context'] = record.extra_data
+        
+        # Adiciona informação de exceção se houver
+        if record.exc_info:
+            log_data['exception'] = self.formatException(record.exc_info)
+        
+        return json.dumps(log_data, ensure_ascii=False, default=str)
+
+
+class Logger:
+    """Logger sofisticado com suporte a contexto e observabilidade."""
+    
+    def __init__(self, name: str, config: Optional[AppConfig] = None):
+        self.name = name
+        self.config = config or get_config()
+        self._logger = self._setup_logger()
+        self._context_stack: list = []
+    
+    def _setup_logger(self) -> logging.Logger:
+        """Configura o logger."""
+        logger = logging.getLogger(self.name)
+        
+        # Define nível
+        level = getattr(logging, self.config.logging.level, logging.INFO)
+        logger.setLevel(level)
+        
+        # Remove handlers existentes
+        logger.handlers = []
+        
+        # Cria diretório de logs
+        Path(self.config.logging.log_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Handler de console
+        if self.config.logging.console_output:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(level)
+            console_formatter = logging.Formatter(
+                self.config.logging.format,
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            console_handler.setFormatter(console_formatter)
+            logger.addHandler(console_handler)
+        
+        # Handler de arquivo (rotativo)
+        if self.config.logging.file_output:
+            log_file = Path(self.config.logging.log_dir) / f"{self.name}.log"
+            file_handler = logging.handlers.RotatingFileHandler(
+                str(log_file),
+                maxBytes=self.config.logging.max_file_size,
+                backupCount=self.config.logging.backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(level)
+            file_formatter = StructuredFormatter()
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
+        
+        return logger
+    
+    def _add_context(self, record: logging.LogRecord) -> None:
+        """Adiciona contexto ao record."""
+        if self._context_stack:
+            record.extra_data = dict(self._context_stack[-1])
+    
+    @contextmanager
+    def context(self, **kwargs):
+        """Context manager para adicionar contexto temporário aos logs."""
+        self._context_stack.append(kwargs)
+        try:
+            yield
+        finally:
+            self._context_stack.pop()
+    
+    def debug(self, message: str, **kwargs) -> None:
+        """Log de debug."""
+        record = self._logger.makeRecord(
+            self._logger.name, logging.DEBUG, "", 0, message, (), None
+        )
+        self._add_context(record)
+        if kwargs:
+            record.extra_data = kwargs
+        self._logger.handle(record)
+    
+    def info(self, message: str, **kwargs) -> None:
+        """Log de informação."""
+        record = self._logger.makeRecord(
+            self._logger.name, logging.INFO, "", 0, message, (), None
+        )
+        self._add_context(record)
+        if kwargs:
+            record.extra_data = kwargs
+        self._logger.handle(record)
+    
+    def warning(self, message: str, **kwargs) -> None:
+        """Log de aviso."""
+        record = self._logger.makeRecord(
+            self._logger.name, logging.WARNING, "", 0, message, (), None
+        )
+        self._add_context(record)
+        if kwargs:
+            record.extra_data = kwargs
+        self._logger.handle(record)
+    
+    def error(self, message: str, **kwargs) -> None:
+        """Log de erro."""
+        record = self._logger.makeRecord(
+            self._logger.name, logging.ERROR, "", 0, message, (), None
+        )
+        self._add_context(record)
+        if kwargs:
+            record.extra_data = kwargs
+        self._logger.handle(record)
+    
+    def critical(self, message: str, **kwargs) -> None:
+        """Log crítico."""
+        record = self._logger.makeRecord(
+            self._logger.name, logging.CRITICAL, "", 0, message, (), None
+        )
+        self._add_context(record)
+        if kwargs:
+            record.extra_data = kwargs
+        self._logger.handle(record)
+    
+    def exception(self, message: str, **kwargs) -> None:
+        """Log de exceção (automático com stack trace)."""
+        self._logger.exception(message)
+
+
+class PerformanceTracker:
+    """Rastreador de performance com logging automático."""
+    
+    def __init__(self, logger: Logger, operation_name: str):
+        self.logger = logger
+        self.operation_name = operation_name
+        self.start_time: Optional[float] = None
+    
+    def __enter__(self):
+        """Inicia o rastreamento."""
+        self.start_time = time.time()
+        self.logger.info(f"Iniciando: {self.operation_name}")
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Finaliza o rastreamento."""
+        elapsed_time = time.time() - self.start_time
+        
+        if exc_type is not None:
+            self.logger.error(
+                f"Erro em {self.operation_name}",
+                operation=self.operation_name,
+                elapsed_seconds=elapsed_time,
+                error=str(exc_val)
+            )
+        else:
+            self.logger.info(
+                f"Concluído: {self.operation_name}",
+                operation=self.operation_name,
+                elapsed_seconds=round(elapsed_time, 3)
+            )
+        
+        return False  # Propaga exceções
+    
+    @staticmethod
+    def track(logger: Logger):
+        """Decorator para rastrear performance de funções."""
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                with PerformanceTracker(logger, f"{func.__module__}.{func.__name__}"):
+                    return func(*args, **kwargs)
+            return wrapper
+        return decorator
+
+
+# Logger global
+_loggers: Dict[str, Logger] = {}
+
+
+def get_logger(name: str, config: Optional[AppConfig] = None) -> Logger:
+    """Obtém ou cria um logger com o nome especificado."""
+    if name not in _loggers:
+        _loggers[name] = Logger(name, config)
+    return _loggers[name]
+
+
+def get_root_logger(config: Optional[AppConfig] = None) -> Logger:
+    """Obtém o logger raiz."""
+    return get_logger("botai", config)

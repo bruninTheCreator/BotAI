@@ -1,0 +1,243 @@
+"""
+Container de Injeção de Dependência (DI) para gerenciamento de componentes.
+Segue padrão de service locator com suporte a diferentes ciclos de vida.
+"""
+
+from typing import Dict, Any, Callable, Optional, Type, TypeVar
+from abc import ABC
+from functools import wraps
+from enum import Enum
+
+from .config import AppConfig, get_config
+from .logging_module import Logger, get_logger
+from .base import Component, Service
+
+T = TypeVar('T')
+
+
+class LifecycleType(Enum):
+    """Tipos de ciclo de vida para componentes."""
+    SINGLETON = "singleton"  # Criado uma vez
+    TRANSIENT = "transient"  # Criado a cada requisição
+    SCOPED = "scoped"  # Criado por escopo
+
+
+class ServiceDescriptor:
+    """Descreve um serviço registrado."""
+    
+    def __init__(
+        self,
+        interface: Type,
+        implementation: Callable,
+        lifecycle: LifecycleType = LifecycleType.SINGLETON,
+        dependencies: Optional[Dict[str, Type]] = None
+    ):
+        self.interface = interface
+        self.implementation = implementation
+        self.lifecycle = lifecycle
+        self.dependencies = dependencies or {}
+        self.instance = None  # Para singleton
+
+
+class ServiceContainer:
+    """Container de injeção de dependência."""
+    
+    def __init__(self, config: Optional[AppConfig] = None):
+        self.config = config or get_config()
+        self.logger = get_logger("DependencyInjection")
+        self._registrations: Dict[Type, ServiceDescriptor] = {}
+        self._singletons: Dict[Type, Any] = {}
+        self._scope_instances: Dict[Type, Any] = {}
+    
+    def register(
+        self,
+        interface: Type[T],
+        implementation: Callable[..., T],
+        lifecycle: LifecycleType = LifecycleType.SINGLETON,
+        **kwargs
+    ) -> 'ServiceContainer':
+        """
+        Registra um serviço.
+        
+        Args:
+            interface: Tipo/Interface do serviço
+            implementation: Factory function ou classe
+            lifecycle: Tipo de ciclo de vida
+            **kwargs: Dependências e configurações
+        """
+        descriptor = ServiceDescriptor(
+            interface=interface,
+            implementation=implementation,
+            lifecycle=lifecycle,
+            dependencies=kwargs
+        )
+        self._registrations[interface] = descriptor
+        self.logger.info(
+            f"Serviço registrado: {interface.__name__} ({lifecycle.value})"
+        )
+        return self
+    
+    def register_singleton(
+        self,
+        interface: Type[T],
+        implementation: Callable[..., T],
+        **kwargs
+    ) -> 'ServiceContainer':
+        """Registra um singleton."""
+        return self.register(interface, implementation, LifecycleType.SINGLETON, **kwargs)
+    
+    def register_transient(
+        self,
+        interface: Type[T],
+        implementation: Callable[..., T],
+        **kwargs
+    ) -> 'ServiceContainer':
+        """Registra um serviço transient."""
+        return self.register(interface, implementation, LifecycleType.TRANSIENT, **kwargs)
+    
+    def register_scoped(
+        self,
+        interface: Type[T],
+        implementation: Callable[..., T],
+        **kwargs
+    ) -> 'ServiceContainer':
+        """Registra um serviço com escopo."""
+        return self.register(interface, implementation, LifecycleType.SCOPED, **kwargs)
+    
+    def register_instance(
+        self,
+        interface: Type[T],
+        instance: T
+    ) -> 'ServiceContainer':
+        """Registra uma instância específica."""
+        descriptor = ServiceDescriptor(
+            interface=interface,
+            implementation=lambda: instance,
+            lifecycle=LifecycleType.SINGLETON
+        )
+        descriptor.instance = instance
+        self._registrations[interface] = descriptor
+        self._singletons[interface] = instance
+        self.logger.info(f"Instância registrada: {interface.__name__}")
+        return self
+    
+    def resolve(self, interface: Type[T]) -> T:
+        """
+        Resolve um serviço pelo tipo.
+        
+        Args:
+            interface: Tipo do serviço a resolver
+            
+        Returns:
+            Instância do serviço
+            
+        Raises:
+            ValueError: Se o serviço não está registrado
+        """
+        if interface not in self._registrations:
+            raise ValueError(f"Serviço não registrado: {interface.__name__}")
+        
+        descriptor = self._registrations[interface]
+        
+        # Singleton
+        if descriptor.lifecycle == LifecycleType.SINGLETON:
+            if interface not in self._singletons:
+                self._singletons[interface] = self._create_instance(descriptor)
+            return self._singletons[interface]
+        
+        # Scoped
+        elif descriptor.lifecycle == LifecycleType.SCOPED:
+            if interface not in self._scope_instances:
+                self._scope_instances[interface] = self._create_instance(descriptor)
+            return self._scope_instances[interface]
+        
+        # Transient
+        else:
+            return self._create_instance(descriptor)
+    
+    def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
+        """Cria uma instância de um serviço."""
+        # Resolve dependências
+        kwargs = {}
+        for dep_name, dep_type in descriptor.dependencies.items():
+            kwargs[dep_name] = self.resolve(dep_type)
+        
+        # Cria instância
+        try:
+            instance = descriptor.implementation(**kwargs)
+            self.logger.debug(
+                f"Instância criada: {descriptor.interface.__name__}"
+            )
+            return instance
+        except Exception as e:
+            self.logger.error(
+                f"Erro ao criar instância de {descriptor.interface.__name__}: {e}"
+            )
+            raise
+    
+    def clear_scope(self) -> None:
+        """Limpa instâncias com escopo."""
+        self._scope_instances.clear()
+        self.logger.debug("Escopo limpo")
+    
+    def get_registrations(self) -> Dict[Type, ServiceDescriptor]:
+        """Retorna todas as registrações."""
+        return self._registrations.copy()
+
+
+class InjectionContext:
+    """Contexto de injeção para acesso ao container em tempo de execução."""
+    
+    _instance: Optional['InjectionContext'] = None
+    
+    def __init__(self, container: Optional[ServiceContainer] = None):
+        self.container = container or ServiceContainer()
+    
+    @classmethod
+    def get_instance(cls) -> 'InjectionContext':
+        """Obtém a instância global."""
+        if cls._instance is None:
+            cls._instance = InjectionContext()
+        return cls._instance
+    
+    @classmethod
+    def set_instance(cls, context: 'InjectionContext') -> None:
+        """Define a instância global."""
+        cls._instance = context
+
+
+def inject(interface: Type[T]) -> Callable:
+    """
+    Decorator para injetar dependências em parâmetros de função.
+    
+    Exemplo:
+        @inject(MyService)
+        def my_function(service: MyService = None):
+            pass
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            context = InjectionContext.get_instance()
+            if 'service' not in kwargs:
+                kwargs['service'] = context.container.resolve(interface)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def setup_di_container() -> ServiceContainer:
+    """Setup padrão de injeção de dependência."""
+    from .config import ConfigLoader
+    
+    container = ServiceContainer()
+    
+    # Registra configuração
+    config = ConfigLoader.from_env()
+    container.register_instance(AppConfig, config)
+    
+    # Registra logger raiz
+    logger = get_logger("botai", config)
+    container.register_instance(Logger, logger)
+    
+    return container

@@ -1,0 +1,24 @@
+
+import pytesseract
+from PIL import Image
+
+# Caminho do executável do Tesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Users\A21057836\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+
+# Caminho da imagem (use o caminho real da sua imagem)
+imagem_path = r"C:\BotAI\imagem.png"  # ajuste para onde sua imagem está
+
+# Abrir a imagem e extrair texto
+texto = pytesseract.image_to_string(Image.open(imagem_path), lang="por")
+
+print("Texto extraído da imagem:")
+print(texto)
+print("Execução do Tesseract definido corretamente.")
+print(f"Tesseract CMD: {pytesseract.pytesseract.tesseract_cmd}")
+
+# verificar se o tesseract esta funcionando
+try:
+    versao = pytesseract.get_tesseract_version()
+    print(f"Tesseract OCR versão: {versao}")
+except Exception as e:
+    print("Erro ao obter a versão do Tesseract OCR:", e)

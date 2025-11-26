@@ -1,0 +1,152 @@
+from .executor import Executor
+from .memoria import Memory
+from .planner_simple import Planner
+from .percepcao import Perception
+from .detector_repeticao import find_patterns_in_memory
+from .supervisor import Supervisor
+
+
+class Assistant:
+    def __init__(self):
+        self.perception = Perception()
+        self.memory = Memory()
+        self.planner = Planner(memory=self.memory)
+        self.executor = Executor()
+        self.supervisor = Supervisor()
+        self.running = True
+
+    def run(self):
+        """Loop principal do assistente de escritório."""
+        print("Assistant iniciado. Pressione Enter para analisar a tela, digite um comando, ou 'sair' para parar.\n")
+
+        while self.running:
+            try:
+                cmd = input("\n>>> ").strip()
+
+                # Comando vazio = analisar tela
+                if not cmd:
+                    print("Analisando a tela...")
+                    screen_text = self.perception.read_text()
+                    patterns = self._detect_patterns(screen_text)
+
+                    if patterns:
+                        print(f"Padrões detectados: {patterns}")
+                        plan = self._suggest_action_for_patterns(patterns)
+                        if plan:
+                            print("Plano sugerido pelo Planner:")
+                            for i, step in enumerate(plan, 1):
+                                print(f"   {i}. {step}")
+
+                            response = input(
+                                "Deseja executar o plano? (s/n): ").strip().lower()
+                            if response == 's':
+                                self._execute_and_log(plan)
+                    else:
+                        print("Nenhum padrão conhecido foi detectado na tela.")
+                        if screen_text:
+                            print(f"Texto capturado:\n{screen_text[:200]}...")
+                    continue
+
+                # Comando de saída
+                if cmd.lower() in ("sair", "exit", "quit"):
+                    print("\nAssistente parado pelo usuário.")
+                    break
+
+                # Salva o comando na memória
+                self.memory.save(
+                    event_type="user_command", data={
+                        "command": cmd})
+
+                # Captura o contexto da tela antes de interpretar
+                print("Capturando contexto da tela...")
+                screen_context = self.perception.read_text()
+
+                # Interpreta o comando COM o contexto da tela
+                print(f"Interpretando comando: '{cmd}'")
+                plan = self.planner.interpret_command(
+                    cmd, screen_context=screen_context)
+
+                if not plan:
+                    print("Não foi possível gerar um plano para este comando.")
+                    continue
+
+                # Exibe o plano
+                print("Plano sugerido pelo Planner:")
+                for i, step in enumerate(plan, 1):
+                    print(f"   {i}. {step}")
+
+                # Confirma execução
+                response = input(
+                    "Deseja executar o plano? (s/n): ").strip().lower()
+                if response != 's':
+                    print("Plano cancelado.")
+                    continue
+
+                # Executa o plano
+                self._execute_and_log(plan)
+
+            except KeyboardInterrupt:
+                print("\n\nAssistente parado pelo usuário.")
+                break
+            except Exception as e:
+                print(f"Erro inesperado: {e}")
+                self.supervisor.log("error", {"message": str(e)})
+
+    def _execute_and_log(self, plan):
+        """Executa o plano e registra os resultados."""
+        results = self.executor.execute_plan(
+            plan, supervisor=self.supervisor, memory=self.memory)
+        print("Resultados da execução:")
+        for res in results:
+            print(f"   - {res}")
+
+        # Salva os resultados na memória
+        for i, res in enumerate(results):
+            self.memory.save(event_type="execution_result", data={
+                "step": i + 1,
+                "action": plan[i].get("action"),
+                "result": res
+            })
+
+        print("Plano concluído com sucesso.")
+        print("-" * 20)
+
+    def _detect_patterns(self, screen_text):
+        """Detecta padrões na tela."""
+        patterns = []
+        text_lower = screen_text.lower()
+
+        if "erro" in text_lower or "error" in text_lower:
+            patterns.append("erro_detectado")
+        if "coluna vazia" in text_lower:
+            patterns.append("coluna_vazia")
+        if "aviso" in text_lower or "warning" in text_lower:
+            patterns.append("aviso")
+        if "jogo da velha" in text_lower or "tic tac toe" in text_lower:
+            patterns.append("jogo_da_velha")
+
+        # Detecta padrões repetidos na memória (eventos frequentes/sequências)
+        try:
+            mem_patterns = find_patterns_in_memory(
+                self.memory, min_event_count=3, seq_n=2, min_seq_count=2)
+            if mem_patterns.get("frequent_events"):
+                # adiciona uma indicação que há padrões frequentes na memória
+                patterns.append("padrao_memoria_detectado")
+        except Exception:
+            # Não falha o fluxo principal se o detector tiver um problema
+            pass
+
+        return patterns
+
+    def _suggest_action_for_patterns(self, patterns):
+        """Sugere ações baseadas nos padrões detectados."""
+        if "erro_detectado" in patterns:
+            return [
+                {"action": "open_app", "target": "logs"},
+                {"action": "type_text", "content": "verificar erro"}
+            ]
+        if "coluna_vazia" in patterns:
+            return [
+                {"action": "type_text", "content": "N/A"}
+            ]
+        return None
