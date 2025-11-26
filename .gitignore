@@ -1,0 +1,27 @@
+# Ambiente virtual
+venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
+
+# Pytest
+.pytest_cache/
+
+# Logs
+logs/
+*.log
+# Logs do sistema do bot
+data/logs/
+data/*.jsonl
+
+# Sistema
+.DS_Store
+Thumbs.db
+# --- IGNORE ---
+# Co-authored-by: bruninTheCreator <
+# --- IGNORE ---
