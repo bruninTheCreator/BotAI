@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, TypeVar, Generic
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import uuid
-from enum import Enum
 
 # ==================== TIPOS GENÉRICOS ====================
 
@@ -113,6 +112,15 @@ class Plan:
         """Adiciona um passo ao plano."""
         self.steps.append(step)
 
+    def __iter__(self):
+        return iter(self.steps)
+
+    def __len__(self):
+        return len(self.steps)
+
+    def __getitem__(self, index):
+        return self.steps[index]
+
     def to_dict(self) -> Dict[str, Any]:
         """Serializa o plano para dicionário."""
         return {
@@ -123,22 +131,6 @@ class Plan:
             'status': self.status.name,
             'priority': self.priority
         }
-class Plan:
-    def __init__(self, name=""):
-        self.name = name
-        self.steps = []
-
-    def add_step(self, step):
-        self.steps.append(step)
-
-    def __iter__(self):
-        return iter(self.steps)
-
-    def __len__(self):
-        return len(self.steps)
-
-    def __getitem__(self, index):
-        return self.steps[index]
 
 @dataclass
 class Result(Generic[ResultT]):
