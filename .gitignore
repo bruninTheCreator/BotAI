@@ -1,6 +1,7 @@
 # Ambiente virtual
 venv/
 .env
+.bot/.env
 
 # Python
 __pycache__/
@@ -18,6 +19,10 @@ logs/
 # Logs do sistema do bot
 data/logs/
 data/*.jsonl
+data/patterns.json
+.bot/data/logs/
+.bot/data/*.jsonl
+.bot/data/patterns.json
 
 # Sistema
 .DS_Store

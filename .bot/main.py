@@ -2,6 +2,10 @@ import os
 from dotenv import load_dotenv
 from core.assistent import Assistant
 
+# Garante que o CWD esteja na pasta do projeto (.bot)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
+
 # Carrega a chave da API do OpenAI do arquivo .env
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -14,7 +18,7 @@ else:
 
 def main():
     """Função principal para inicializar e executar o assistente."""
-    assistant = Assistant(openai_api_key=openai_api_key)
+    assistant = Assistant(openai_api_key=openai_api_key, auto_monitor=False)
     assistant.run()
     
 if __name__ == "__main__":

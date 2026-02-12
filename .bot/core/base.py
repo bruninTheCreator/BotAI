@@ -40,6 +40,7 @@ class ActionType(Enum):
     SCREENSHOT = auto()
     OCR = auto()
     WAIT = auto()
+    RESEARCH_WEB = auto()
     NOOP = "NOOP"
     ASK_CLARIFICATION = "ask_clarification"
 

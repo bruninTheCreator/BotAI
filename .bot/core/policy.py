@@ -69,13 +69,17 @@ class Policy:
             PermissionLevel.SYSTEM_CONTROL: {
                 "click",
                 "type",
+                "type_text",
                 "open_app",
                 "close_app",
                 "hotkey",
+                "wait",
             },
             PermissionLevel.NETWORK: {
+                "browse",
                 "browse_url",
                 "send_http_request",
+                "research_web",
             },
             PermissionLevel.ADMIN: {
                 "execute_script",

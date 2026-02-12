@@ -48,35 +48,13 @@ from .logging_module import (
     get_root_logger,
 )
 
-from .di_container import (
-    ServiceContainer,
-    ServiceDescriptor,
-    InjectionContext,
-    LifecycleType,
-    inject,
-    setup_di_container,
-)
-
-from .state_machine import (
-    StateMachine,
-    AssistantState,
-    Trigger,
-    Transition,
-    StateMetadata,
-    StateMachineFactory,
-)
-
-from .event_emitter import (
-    EventEmitterImpl,
-    EventBus,
-    Priority,
-    ObserverRegistration,
-)
-
 from .percepcao import (
     PerceptionImpl,
     ImagePreprocessor,
 )
+from .pattern_engine import PatternEngine
+from .observation_loop import ObservationLoop
+from .llm_client import LLMClient
 
 __all__ = [
     # Base
@@ -114,28 +92,13 @@ __all__ = [
     'PerformanceTracker',
     'get_logger',
     'get_root_logger',
-    # DI
-    'ServiceContainer',
-    'ServiceDescriptor',
-    'InjectionContext',
-    'LifecycleType',
-    'inject',
-    'setup_di_container',
-    # State Machine
-    'StateMachine',
-    'AssistantState',
-    'Trigger',
-    'Transition',
-    'StateMetadata',
-    'StateMachineFactory',
-    # Events
-    'EventEmitterImpl',
-    'EventBus',
-    'Priority',
-    'ObserverRegistration',
     # Perception
     'PerceptionImpl',
     'ImagePreprocessor',
+    # Pattern / LLM
+    'PatternEngine',
+    'ObservationLoop',
+    'LLMClient',
 ]
 
 __version__ = "2.0.0"

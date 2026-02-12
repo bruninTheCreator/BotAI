@@ -6,8 +6,8 @@ Uso:
 
 Se `out.json` não for fornecido, escreve em `data/patterns_report.json`.
 """
-from core.detector_repeticao import export_patterns_json
 from core.memoria import Memory
+from core.pattern_engine import PatternEngine
 import os
 import sys
 
@@ -18,14 +18,16 @@ if ROOT not in sys.path:
 
 
 def main():
-    out = sys.argv[1] if len(
-        sys.argv) > 1 else os.path.join(
-        'data',
-        'patterns_report.json')
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join('data', 'patterns_report.json')
     mem = Memory()
+    engine = PatternEngine(memory=mem)
+    engine.update()
+    patterns = engine.list_patterns(top=0, sort_by="confidence")
     os.makedirs(os.path.dirname(out) or '.', exist_ok=True)
-    path = export_patterns_json(mem, out_path=out)
-    print(f"Relatório de padrões exportado para: {path}")
+    with open(out, "w", encoding="utf-8") as f:
+        import json
+        json.dump(patterns, f, ensure_ascii=False, indent=2)
+    print(f"Relatório de padrões exportado para: {out}")
 
 
 if __name__ == '__main__':

@@ -48,6 +48,12 @@ class PerceptionConfig:
     preprocessing_scale: float = 1.5
     template_matching_threshold: float = 0.8
     screenshot_quality: int = 90
+    use_ui_automation: bool = True
+    ui_max_elements: int = 250
+    ui_max_depth: int = 6
+    ui_min_chars: int = 20
+    merge_ui_and_ocr: bool = True
+    redact_sensitive_text: bool = True
 
 
 @dataclass
@@ -124,9 +130,12 @@ class ConfigLoader:
         """Carrega configuração a partir de variáveis de ambiente."""
         load_dotenv()
 
+        def _bool(name: str, default: str = "false") -> bool:
+            return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
         config = AppConfig(
             env=Environment(os.getenv("ENV", "development")),
-            debug=os.getenv("DEBUG", "false").lower() == "true",
+            debug=_bool("DEBUG"),
         )
 
         # OpenAI
@@ -137,10 +146,18 @@ class ConfigLoader:
         # Perception
         config.perception.tesseract_path = os.getenv("TESSERACT_CMD")
         config.perception.ocr_lang = os.getenv("OCR_LANG", "por")
+        config.perception.use_preprocessing = _bool("OCR_USE_PREPROCESSING", "true")
+        config.perception.preprocessing_scale = float(os.getenv("OCR_PREPROCESSING_SCALE", "1.5"))
+        config.perception.use_ui_automation = _bool("USE_UI_AUTOMATION", "true")
+        config.perception.ui_max_elements = int(os.getenv("UI_MAX_ELEMENTS", "250"))
+        config.perception.ui_max_depth = int(os.getenv("UI_MAX_DEPTH", "6"))
+        config.perception.ui_min_chars = int(os.getenv("UI_MIN_CHARS", "20"))
+        config.perception.merge_ui_and_ocr = _bool("MERGE_UI_AND_OCR", "true")
+        config.perception.redact_sensitive_text = _bool("REDACT_SENSITIVE_TEXT", "true")
 
         # Memory
         config.memory.storage_path = os.getenv("MEMORY_PATH", "data/memory_log.jsonl")  # noqa: E501
-        config.memory.vector_storage_enabled = os.getenv("VECTOR_STORAGE", "false").lower() == "true"  # noqa: E501
+        config.memory.vector_storage_enabled = _bool("VECTOR_STORAGE")
 
         # Logging
         config.logging.level = os.getenv("LOG_LEVEL", "INFO")
@@ -224,6 +241,12 @@ class ConfigLoader:
                 'use_preprocessing': config.perception.use_preprocessing,
                 'preprocessing_scale': config.perception.preprocessing_scale,
                 'template_matching_threshold': config.perception.template_matching_threshold,  # noqa: E501
+                'use_ui_automation': config.perception.use_ui_automation,
+                'ui_max_elements': config.perception.ui_max_elements,
+                'ui_max_depth': config.perception.ui_max_depth,
+                'ui_min_chars': config.perception.ui_min_chars,
+                'merge_ui_and_ocr': config.perception.merge_ui_and_ocr,
+                'redact_sensitive_text': config.perception.redact_sensitive_text,
             },
             'executor': {
                 'enable_confirmation': config.executor.enable_confirmation,

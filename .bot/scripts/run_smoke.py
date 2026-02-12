@@ -19,7 +19,7 @@ if ROOT not in sys.path:
 def smoke_run():
     a = Assistant()
     print("[smoke] Capturando texto da tela (pode ser placeholder se OCR ausente)...")
-    text = a.perception.read_text()
+    text = a._read_text_sync()
     print(f"[smoke] Texto (resumo 200 chars): {text[:200]!r}")
 
     patterns = a._detect_patterns(text)
@@ -27,13 +27,9 @@ def smoke_run():
 
     # Detecta padrões na memória com detalhes
     try:
-        from core.detector_repeticao import find_patterns_in_memory
-        dp = find_patterns_in_memory(a.memory)
-        total = dp.get('total_events')
-        fe = len(dp.get('frequent_events', {}))
-        fs = len(dp.get('frequent_sequences', {}))
-        print(
-            f"[smoke] Detector retornou: total_events={total}, frequent_events={fe}, frequent_sequences={fs}")
+        new_patterns = a.pattern_engine.update()
+        total = len(a.pattern_engine.list_patterns(top=0))
+        print(f"[smoke] PatternEngine: novos={len(new_patterns)}, total={total}")
     except Exception as e:
         print(f"[smoke] Erro ao rodar detector: {e}")
 

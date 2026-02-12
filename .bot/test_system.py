@@ -1,8 +1,5 @@
-
 import os
-from dotenv import load_dotenv
-
-import os
+import asyncio
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente
@@ -13,12 +10,13 @@ def test_imports():
     """Testa se todos os módulos podem ser importados."""
     print("Testando imports...")
     try:
-        from core.percepcao import Perception
+        from core.percepcao import PerceptionImpl
         from core.memoria import Memory
         from core.planner import Planner
         from core.executor import Executor
         from core.supervisor import Supervisor
         from core.assistent import Assistant
+        _ = (PerceptionImpl, Memory, Planner, Executor, Supervisor, Assistant)
         print("  [OK] Todos os imports funcionaram")
         return True
     except Exception as e:
@@ -30,21 +28,22 @@ def test_perception():
     """Testa o módulo de percepção."""
     print("\nTestando Perception...")
     try:
-        from core.percepcao import Perception
-        p = Perception()
+        from core.percepcao import PerceptionImpl
+        p = PerceptionImpl()
 
         # Testa captura de tela
-        img = p.capture_screen()
-        if img is not None:
-            print(f"  [OK] Captura de tela funcionou (shape: {img.shape})")
+        img_res = asyncio.run(p.capture_screen())
+        if img_res and getattr(img_res, "success", False) and img_res.data is not None:
+            print(f"  [OK] Captura de tela funcionou (shape: {img_res.data.shape})")
         else:
             print("  [ERRO] Captura de tela retornou None")
             return False
 
         # Testa OCR (pode falhar se Tesseract não estiver instalado)
-        text = p.read_text()
-        if text == "[OCR indisponível - Tesseract não instalado]":
-            print("  [AVISO] OCR indisponível (Tesseract não instalado)")
+        text_res = asyncio.run(p.read_text())
+        text = text_res.data if getattr(text_res, "success", False) else ""
+        if not text:
+            print("  [AVISO] OCR indisponível ou sem texto")
         else:
             print(f"  [OK] OCR funcionou (capturou {len(text)} caracteres)")
 
@@ -82,16 +81,11 @@ def test_planner():
     """Testa o módulo de planejamento."""
     print("\nTestando Planner...")
     try:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            print("  [ERRO] OPENAI_API_KEY não encontrada no .env")
-            return False
-
         from core.memoria import Memory
         from core.planner import Planner
 
         m = Memory()
-        p = Planner(memory=m)
+        p = Planner(memory=m, use_llm=False)
 
         # Testa interpretação de comando simples
         plan = p.interpret_command("abrir o bloco de notas", screen_context="")
@@ -144,7 +138,7 @@ def test_assistant():
     try:
         from core.assistent import Assistant
 
-        a = Assistant()
+        a = Assistant(auto_monitor=False)
         print("  [OK] Assistant inicializado com sucesso")
         print(f"      - Perception: {type(a.perception).__name__}")
         print(f"      - Memory: {type(a.memory).__name__}")

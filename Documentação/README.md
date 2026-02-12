@@ -47,6 +47,18 @@ echo "OPENAI_API_KEY=sua_chave_aqui" > .env
 & ".\.venv\Scripts\python.exe" main.py
 ```
 
+Interface gráfica (opcional)
+
+```powershell
+& ".\.venv\Scripts\python.exe" main_gui.py
+```
+
+Comandos do assistente
+
+- `monitor on/off` ativa/desativa o monitoramento contínuo (OCR em background)
+- `patterns [n]` lista padrões detectados (top n)
+- `auto on/off` permite execução automática para padrões com `mode: "auto"`
+
 Notas e recomendações
 
 - O detector de repetição é leve e baseado em hash/assinaturas; para maior robustez considere embeddings e clustering.
